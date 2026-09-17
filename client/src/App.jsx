@@ -1,39 +1,92 @@
-import React, { useState, useEffect } from 'react';
-import Header from './components/Header';
-import TextInput from './components/TextInput';
-import VoiceSelector from './components/VoiceSelector';
-import AudioControls from './components/AudioControls';
-import AudioPlayer from './components/AudioPlayer';
-import HistoryList from './components/HistoryList';
+import React, { useState, useEffect, useRef } from 'react';
+import TopNav from './components/TopNav';
+import Sidebar from './components/Sidebar';
+import StudioCanvas from './components/StudioCanvas';
+import RightPanel from './components/RightPanel';
+import BottomPlayerBar from './components/BottomPlayerBar';
 import Alert from './components/Alert';
 import { fetchVoices, generateSpeech, fetchHealth } from './services/api';
-import { Wand2, Loader2 } from 'lucide-react';
 
-const STORAGE_KEY = 'voxcraft_speech_history';
+const STORAGE_KEY = 'voxera_speech_history';
+
+const FEATURED_VOICES = [
+  {
+    id: 'en-US-GuyNeural',
+    displayName: 'Jax',
+    tagline: 'Calm & mature',
+    avatar: '/assets/jax.jpg',
+    gender: 'Male',
+    locale: 'en-US',
+  },
+  {
+    id: 'en-US-JennyNeural',
+    displayName: 'Meghan',
+    tagline: 'Friendly and comforting',
+    avatar: '/assets/meghan.jpg',
+    gender: 'Female',
+    locale: 'en-US',
+  },
+  {
+    id: 'en-US-AriaNeural',
+    displayName: 'Aether',
+    tagline: 'Rich & expressive',
+    avatar: '/assets/aether.jpg',
+    gender: 'Female',
+    locale: 'en-US',
+  },
+];
+
+const DEFAULT_EDITOR_TEXT =
+  'Did you know the human voice is one of the most expressive instruments in the world? With just tone, pace, and emotion, a voice can explain complex ideas, tell powerful stories, and guide people through an experience.';
 
 export default function App() {
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isOnline, setIsOnline] = useState(false);
   const [languages, setLanguages] = useState([]);
-  const [voices, setVoices] = useState([]);
+  const [allVoices, setAllVoices] = useState([]);
+
+  // Voice Selection
+  const [activeVoice, setActiveVoice] = useState(FEATURED_VOICES[1]); // Default to Meghan
   const [selectedLocale, setSelectedLocale] = useState('en-US');
-  const [selectedVoice, setSelectedVoice] = useState('en-US-JennyNeural');
 
-  // Input states
-  const [text, setText] = useState(
-    'Hello! Welcome to VoxCraft, a full-stack text-to-speech application built with React, Node.js, and free neural AI voices.'
-  );
+  // Text content
+  const [editorText, setEditorText] = useState(DEFAULT_EDITOR_TEXT);
 
-  // Audio customization controls
-  const [rate, setRate] = useState(1.0);
-  const [pitch, setPitch] = useState(0);
-  const [volume, setVolume] = useState(100);
+  // Real Audio Controls
+  const [speed, setSpeed] = useState(1.0); // 0.5 - 2.0
+  const [pitch, setPitch] = useState(0); // -50Hz to +50Hz
+  const [volume, setVolume] = useState(100); // 10% - 100%
 
-  // Execution & playback states
+  // Panel & View States
+  const [panelTab, setPanelTab] = useState('settings');
+  const [showAllVoices, setShowAllVoices] = useState(false);
+
+  const handleSelectSidebarView = (view) => {
+    if (view === 'studio') {
+      setPanelTab('settings');
+      setShowAllVoices(false);
+    } else if (view === 'voices') {
+      setPanelTab('settings');
+      setShowAllVoices(true);
+    } else if (view === 'history') {
+      setPanelTab('history');
+    }
+  };
+
+  const activeSidebarView =
+    panelTab === 'history' ? 'history' : showAllVoices ? 'voices' : 'studio';
+
+  // Generation & Audio Playback State
   const [isGenerating, setIsGenerating] = useState(false);
-  const [currentAudio, setCurrentAudio] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
+  const [currentAudio, setCurrentAudio] = useState(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
 
-  // History state
+  const audioRef = useRef(null);
+
+  // History State
   const [history, setHistory] = useState(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
@@ -43,76 +96,95 @@ export default function App() {
     }
   });
 
-  // Load voices and check backend status on mount
+  // Check health and load voices
   useEffect(() => {
-    let isMounted = true;
-
-    async function init() {
+    let mounted = true;
+    async function loadData() {
       try {
         const health = await fetchHealth();
-        if (isMounted) setIsOnline(health.status === 'ok');
+        if (mounted) setIsOnline(health.status === 'ok');
 
-        const voiceData = await fetchVoices();
-        if (isMounted && voiceData.success) {
-          setLanguages(voiceData.languages);
-          setVoices(voiceData.voices);
-
-          // Default to US English or first available
-          const defaultLang = voiceData.languages.find((l) => l.locale === 'en-US') || voiceData.languages[0];
-          if (defaultLang) {
-            setSelectedLocale(defaultLang.locale);
-            const matchingVoices = voiceData.voices.filter((v) => v.locale === defaultLang.locale);
-            if (matchingVoices.length > 0) {
-              setSelectedVoice(matchingVoices[0].id);
-            }
-          }
+        const voiceRes = await fetchVoices();
+        if (mounted && voiceRes.success) {
+          setLanguages(voiceRes.languages);
+          setAllVoices(voiceRes.voices);
         }
       } catch (err) {
-        console.error('Initialization error:', err);
-        if (isMounted) {
+        console.error('Connection failed:', err);
+        if (mounted) {
           setIsOnline(false);
-          setErrorMessage('Could not connect to Text-to-Speech server. Please verify backend is running on port 5000.');
+          setErrorMessage('Connecting to TTS server on port 5000...');
         }
       }
     }
-
-    init();
+    loadData();
     return () => {
-      isMounted = false;
+      mounted = false;
     };
   }, []);
 
-  // When locale changes, update selected voice to first voice in that language
-  const handleLocaleChange = (locale) => {
-    setSelectedLocale(locale);
-    const matching = voices.filter((v) => v.locale === locale);
-    if (matching.length > 0) {
-      setSelectedVoice(matching[0].id);
+  // Update volume on audio element
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = volume / 100;
+    }
+  }, [volume]);
+
+  // Audio Player Event Handlers
+  const togglePlay = () => {
+    if (!audioRef.current || !currentAudio) return;
+    if (isPlaying) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+    } else {
+      audioRef.current.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
     }
   };
 
-  // Handle Preset selection
-  const handlePresetSelect = (presetText, presetLocale) => {
-    setText(presetText);
-    if (presetLocale) {
-      const exists = languages.some((l) => l.locale === presetLocale);
-      if (exists) {
-        handleLocaleChange(presetLocale);
-      }
+  const handleTimeUpdate = () => {
+    if (audioRef.current) {
+      setCurrentTime(audioRef.current.currentTime);
     }
   };
 
-  // Reset audio settings
+  const handleLoadedMetadata = () => {
+    if (audioRef.current) {
+      setDuration(audioRef.current.duration || 0);
+    }
+  };
+
+  const handleAudioEnded = () => {
+    setIsPlaying(false);
+    setCurrentTime(0);
+  };
+
+  const handleSeek = (timeSecs) => {
+    if (audioRef.current) {
+      const validTime = Math.max(0, Math.min(timeSecs, duration));
+      audioRef.current.currentTime = validTime;
+      setCurrentTime(validTime);
+    }
+  };
+
+  const handleRewind = () => {
+    handleSeek(currentTime - 5);
+  };
+
+  const handleForward = () => {
+    handleSeek(currentTime + 5);
+  };
+
   const handleResetControls = () => {
-    setRate(1.0);
+    setSpeed(1.0);
     setPitch(0);
     setVolume(100);
   };
 
-  // Generate speech handler
-  const handleGenerate = async () => {
-    if (!text || text.trim() === '') {
-      setErrorMessage('Please enter some text before generating speech.');
+  // Generate Voice action
+  const handleGenerateVoice = async () => {
+    const textToSpeak = editorText.trim();
+    if (!textToSpeak) {
+      setErrorMessage('Please enter some text to generate speech.');
       return;
     }
 
@@ -121,129 +193,179 @@ export default function App() {
 
     try {
       const result = await generateSpeech({
-        text: text.trim(),
-        voice: selectedVoice,
-        rate,
-        pitch,
-        volume,
+        text: textToSpeak,
+        voice: activeVoice.id,
+        rate: speed,
+        pitch: pitch,
+        volume: volume,
       });
 
       if (result.success) {
         setCurrentAudio(result);
 
-        // Add to history
-        const updated = [result, ...history.filter((h) => h.fileName !== result.fileName)].slice(0, 15);
+        // Update history
+        const updated = [result, ...history.filter((h) => h.fileName !== result.fileName)].slice(0, 20);
         setHistory(updated);
         try {
           localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
         } catch (e) {
-          console.warn('Failed to save to localStorage', e);
+          console.warn('localStorage error', e);
+        }
+
+        // Auto-play generated audio
+        if (audioRef.current) {
+          audioRef.current.src = result.audioUrl;
+          audioRef.current.load();
+          audioRef.current.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
         }
       }
     } catch (err) {
-      console.error('Generation error:', err);
-      setErrorMessage(err.message || 'Speech generation failed. Please try again.');
+      console.error('Speech generation error:', err);
+      setErrorMessage(err.message || 'Generation failed. Please try again.');
     } finally {
       setIsGenerating(false);
     }
   };
 
-  // History handlers
-  const handleSelectHistoryItem = (item) => {
+  const handleSelectLocale = (locale) => {
+    setSelectedLocale(locale);
+    // Find voices matching this locale
+    const matching = allVoices.filter((v) => v.locale === locale);
+    if (matching.length > 0) {
+      const topVoice = matching[0];
+      setActiveVoice({
+        id: topVoice.id,
+        displayName: topVoice.name.split('-')[0].trim(),
+        tagline: `${topVoice.localeName} (${topVoice.gender})`,
+        avatar: topVoice.gender === 'Female' ? '/assets/meghan.jpg' : '/assets/jax.jpg',
+        gender: topVoice.gender,
+        locale: topVoice.locale,
+      });
+    }
+  };
+
+  const handleSelectFeaturedVoice = (v) => {
+    setActiveVoice(v);
+    setSelectedLocale(v.locale);
+  };
+
+  const handleSelectAnyVoiceId = (voiceId) => {
+    const found = allVoices.find((v) => v.id === voiceId);
+    if (found) {
+      setActiveVoice({
+        id: found.id,
+        displayName: found.name.split('-')[0].trim(),
+        tagline: `${found.localeName} (${found.gender})`,
+        avatar: found.gender === 'Female' ? '/assets/meghan.jpg' : '/assets/jax.jpg',
+        gender: found.gender,
+        locale: found.locale,
+      });
+      setSelectedLocale(found.locale);
+    }
+  };
+
+  const handlePlayHistoryItem = (item) => {
     setCurrentAudio(item);
-    setText(item.text);
-    if (item.voice) {
-      const voiceObj = voices.find((v) => v.id === item.voice);
-      if (voiceObj) {
-        setSelectedLocale(voiceObj.locale);
-        setSelectedVoice(voiceObj.id);
-      }
+    setEditorText(item.text);
+    if (audioRef.current) {
+      audioRef.current.src = item.audioUrl;
+      audioRef.current.load();
+      audioRef.current.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
     }
   };
 
   const handleDeleteHistoryItem = (fileName) => {
-    const updated = history.filter((item) => item.fileName !== fileName);
+    const updated = history.filter((h) => h.fileName !== fileName);
     setHistory(updated);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
   };
 
-  const handleClearHistory = () => {
-    setHistory([]);
-    localStorage.removeItem(STORAGE_KEY);
-  };
-
   return (
-    <div className="app-container">
-      <Header isOnline={isOnline} />
+    <div className="vox-app-shell">
+      {/* Hidden native audio element */}
+      <audio
+        ref={audioRef}
+        onTimeUpdate={handleTimeUpdate}
+        onLoadedMetadata={handleLoadedMetadata}
+        onEnded={handleAudioEnded}
+      />
 
-      <Alert message={errorMessage} onClose={() => setErrorMessage(null)} />
+      {/* Top Navigation Bar */}
+      <TopNav
+        sidebarOpen={sidebarOpen}
+        onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+        isOnline={isOnline}
+      />
 
-      <main className="main-grid">
-        {/* Left Column: Text Input, Player, History */}
-        <section style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <TextInput
-            text={text}
-            onChange={setText}
-            onSelectPreset={handlePresetSelect}
-            disabled={isGenerating}
-            maxLength={2000}
-          />
+      {/* Main Studio Body */}
+      <div className="vox-studio-body">
+        <Sidebar
+          isOpen={sidebarOpen}
+          activeView={activeSidebarView}
+          historyCount={history.length}
+          onSelectView={handleSelectSidebarView}
+        />
 
-          {/* Audio Player for generated speech */}
-          {currentAudio && <AudioPlayer audioData={currentAudio} />}
+        <main className="vox-main-content">
+          <Alert message={errorMessage} onClose={() => setErrorMessage(null)} />
 
-          {/* History of past generations */}
-          <HistoryList
-            items={history}
-            onSelect={handleSelectHistoryItem}
-            onDelete={handleDeleteHistoryItem}
-            onClearAll={handleClearHistory}
-          />
-        </section>
+          <div className="vox-content-columns">
+            {/* Center Canvas */}
+            <StudioCanvas
+              activeVoice={activeVoice}
+              editorText={editorText}
+              onChangeEditorText={setEditorText}
+              onGenerateVoice={handleGenerateVoice}
+              isGenerating={isGenerating}
+              languages={languages}
+              selectedLocale={selectedLocale}
+              onSelectLocale={handleSelectLocale}
+              isPlaying={isPlaying}
+            />
 
-        {/* Right Column: Voice & Language, Audio Controls, Generate Button */}
-        <aside style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <VoiceSelector
-            languages={languages}
-            voices={voices}
-            selectedLocale={selectedLocale}
-            selectedVoice={selectedVoice}
-            onSelectLocale={handleLocaleChange}
-            onSelectVoice={setSelectedVoice}
-            loading={!isOnline && voices.length === 0}
-          />
+            {/* Right Settings & History Panel */}
+            <RightPanel
+              activeVoice={activeVoice}
+              onSelectVoiceCard={handleSelectFeaturedVoice}
+              featuredVoices={FEATURED_VOICES}
+              speed={speed}
+              onChangeSpeed={setSpeed}
+              pitch={pitch}
+              onChangePitch={setPitch}
+              volume={volume}
+              onChangeVolume={setVolume}
+              onResetControls={handleResetControls}
+              history={history}
+              onPlayHistory={handlePlayHistoryItem}
+              onDeleteHistory={handleDeleteHistoryItem}
+              allVoices={allVoices}
+              onSelectVoiceId={handleSelectAnyVoiceId}
+              languages={languages}
+              selectedLocale={selectedLocale}
+              onSelectLocale={handleSelectLocale}
+              activeTab={panelTab}
+              onTabChange={setPanelTab}
+              showAllVoices={showAllVoices}
+              onToggleShowAllVoices={setShowAllVoices}
+            />
+          </div>
+        </main>
+      </div>
 
-          <AudioControls
-            rate={rate}
-            pitch={pitch}
-            volume={volume}
-            onChangeRate={setRate}
-            onChangePitch={setPitch}
-            onChangeVolume={setVolume}
-            onReset={handleResetControls}
-            disabled={isGenerating}
-          />
-
-          <button
-            type="button"
-            className="btn-generate"
-            onClick={handleGenerate}
-            disabled={isGenerating || !text.trim()}
-          >
-            {isGenerating ? (
-              <>
-                <Loader2 size={20} className="spin-loader" />
-                <span>Synthesizing Audio...</span>
-              </>
-            ) : (
-              <>
-                <Wand2 size={20} />
-                <span>Generate Speech</span>
-              </>
-            )}
-          </button>
-        </aside>
-      </main>
+      {/* Persistent Bottom Audio Player Bar */}
+      <BottomPlayerBar
+        audioData={currentAudio}
+        activeVoice={activeVoice}
+        isPlaying={isPlaying}
+        onTogglePlay={togglePlay}
+        currentTime={currentTime}
+        duration={duration}
+        onSeek={handleSeek}
+        onRewind={handleRewind}
+        onForward={handleForward}
+        volume={volume}
+        onChangeVolume={setVolume}
+      />
     </div>
   );
 }
