@@ -48,17 +48,23 @@ app.use((req, res) => {
   res.status(404).json({ success: false, error: 'Endpoint not found' });
 });
 
-// Periodic cleanup of audio files (runs every 30 minutes)
-cleanupOldAudioFiles();
-setInterval(() => {
-  cleanupOldAudioFiles();
-}, 30 * 60 * 1000);
+// Periodic cleanup of audio files and standalone server start
+const isDirectRun = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`===========================================`);
-  console.log(`🚀 TTS Server running on http://localhost:${PORT}`);
-  console.log(`🎙️  Health check: http://localhost:${PORT}/api/health`);
-  console.log(`🔊 Voices list:  http://localhost:${PORT}/api/voices`);
-  console.log(`===========================================`);
-});
+if (isDirectRun && !process.env.VERCEL) {
+  cleanupOldAudioFiles();
+  setInterval(() => {
+    cleanupOldAudioFiles();
+  }, 30 * 60 * 1000);
+
+  // Start server locally
+  app.listen(PORT, () => {
+    console.log(`===========================================`);
+    console.log(`🚀 TTS Server running on http://localhost:${PORT}`);
+    console.log(`🎙️  Health check: http://localhost:${PORT}/api/health`);
+    console.log(`🔊 Voices list:  http://localhost:${PORT}/api/voices`);
+    console.log(`===========================================`);
+  });
+}
+
+export default app;

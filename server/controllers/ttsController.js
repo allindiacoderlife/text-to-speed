@@ -116,31 +116,39 @@ export const generateSpeech = async (req, res) => {
       volume: parsedVolume,
     });
 
-    const writeStream = fs.createWriteStream(filePath);
-
+    // Buffer audio in memory for serverless (Vercel) compatibility
+    const chunks = [];
     await new Promise((resolve, reject) => {
-      audioStream.pipe(writeStream);
-      audioStream.on('error', (err) => {
-        tts.close();
-        reject(err);
-      });
-      writeStream.on('finish', () => {
+      audioStream.on('data', (chunk) => chunks.push(chunk));
+      audioStream.on('end', () => {
         tts.close();
         resolve();
       });
-      writeStream.on('error', (err) => {
+      audioStream.on('error', (err) => {
         tts.close();
         reject(err);
       });
     });
 
-    const stat = fs.statSync(filePath);
+    const audioBuffer = Buffer.concat(chunks);
+    const base64Audio = `data:audio/mp3;base64,${audioBuffer.toString('base64')}`;
+
+    // Optionally write to disk if running in persistent local development
+    if (!process.env.VERCEL) {
+      try {
+        const audioDir = ensureAudioDir();
+        const filePath = path.join(audioDir, fileName);
+        fs.writeFileSync(filePath, audioBuffer);
+      } catch (e) {
+        // Disk write is optional fallback
+      }
+    }
 
     return res.status(200).json({
       success: true,
-      audioUrl: `/audio/${fileName}`,
+      audioUrl: base64Audio,
       fileName,
-      sizeBytes: stat.size,
+      sizeBytes: audioBuffer.length,
       text: text.trim(),
       voice,
       rate: parsedRate,

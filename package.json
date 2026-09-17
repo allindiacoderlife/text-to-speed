@@ -1,12 +1,20 @@
 {
   "name": "text-to-speech-app",
   "version": "1.0.0",
+  "type": "module",
   "private": true,
   "scripts": {
-    "install-all": "npm install --prefix server && npm install --prefix client",
-    "dev:server": "npm run dev --prefix server",
+    "build": "npm install --prefix client && npm run build --prefix client",
+    "install-all": "npm install && npm install --prefix server && npm install --prefix client",
+    "dev:server": "node server/server.js",
     "dev:client": "npm run dev --prefix client",
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\""
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "msedge-tts": "^2.0.7"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
