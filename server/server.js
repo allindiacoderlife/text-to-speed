@@ -28,11 +28,12 @@ app.use(express.urlencoded({ extended: true }));
 // Serve static audio files
 app.use('/audio', express.static(path.join(__dirname, 'public', 'audio')));
 
-// API Routes
+// API Routes (supports both /api/* and /* for serverless function compatibility)
 app.use('/api', ttsRoutes);
+app.use('/', ttsRoutes);
 
-// Root test route
-app.get('/', (req, res) => {
+// Root test info endpoint (if not handled by ttsRoutes)
+app.get('/info', (req, res) => {
   res.json({
     message: 'Text-to-Speech API Server is running',
     endpoints: {
