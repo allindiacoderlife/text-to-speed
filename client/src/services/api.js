@@ -2,7 +2,11 @@
  * API Service for communicating with the Text-to-Speech backend
  */
 
-const API_BASE = import.meta.env.VITE_API_URL || '/api';
+const API_BASE =
+  import.meta.env.VITE_API_URL ||
+  (import.meta.env.PROD
+    ? 'https://text-to-speed-three.vercel.app/api'
+    : '/api');
 
 export async function fetchHealth() {
   const response = await fetch(`${API_BASE}/health`);
