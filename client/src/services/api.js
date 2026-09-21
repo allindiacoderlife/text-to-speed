@@ -2,7 +2,7 @@
  * API Service for communicating with the Text-to-Speech backend
  */
 
-const API_BASE = '/api';
+const API_BASE = import.meta.env.VITE_API_URL;
 
 export async function fetchHealth() {
   const response = await fetch(`${API_BASE}/health`);
@@ -16,16 +16,22 @@ export async function fetchVoices() {
   const response = await fetch(`${API_BASE}/voices`);
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error || 'Failed to fetch voices list');
+    throw new Error(errorData.error || "Failed to fetch voices list");
   }
   return response.json();
 }
 
-export async function generateSpeech({ text, voice, rate = 1.0, pitch = 0, volume = 100 }) {
+export async function generateSpeech({
+  text,
+  voice,
+  rate = 1.0,
+  pitch = 0,
+  volume = 100,
+}) {
   const response = await fetch(`${API_BASE}/tts`, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     },
     body: JSON.stringify({
       text,
@@ -39,7 +45,7 @@ export async function generateSpeech({ text, voice, rate = 1.0, pitch = 0, volum
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    throw new Error(data.error || 'Failed to generate speech');
+    throw new Error(data.error || "Failed to generate speech");
   }
 
   return data;
