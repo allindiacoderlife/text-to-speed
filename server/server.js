@@ -32,14 +32,15 @@ app.use('/audio', express.static(path.join(__dirname, 'public', 'audio')));
 app.use('/api', ttsRoutes);
 app.use('/', ttsRoutes);
 
-// Root test info endpoint (if not handled by ttsRoutes)
-app.get('/info', (req, res) => {
+// Root status endpoint
+app.get(['/', '/info'], (req, res) => {
   res.json({
-    message: 'Text-to-Speech API Server is running',
+    success: true,
+    message: '🎙️ Text-to-Speech API Server is running!',
     endpoints: {
-      health: 'GET /api/health',
-      voices: 'GET /api/voices',
-      generate: 'POST /api/tts',
+      health: 'GET /api/health (or /health)',
+      voices: 'GET /api/voices (or /voices)',
+      generate: 'POST /api/tts (or /tts)',
     },
   });
 });
